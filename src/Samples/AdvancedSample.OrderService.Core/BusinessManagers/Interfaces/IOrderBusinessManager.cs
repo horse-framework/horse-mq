@@ -8,6 +8,6 @@ namespace AdvancedSample.OrderService.Core.BusinessManagers.Interfaces
 	public interface IOrderBusinessManager
 	{
 		public ValueTask<Order> Create(OrderDTO order);
-		public ValueTask<OrderSnapshot> CreateSnapshot(OrderDTO order, ProductDTO product);
+		public ValueTask<OrderSnapshot> AddOrUpdateSnapshot(OrderDTO order, ProductDTO product);
 	}
 }

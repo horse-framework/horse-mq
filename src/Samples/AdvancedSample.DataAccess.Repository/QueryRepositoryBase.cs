@@ -37,7 +37,7 @@ namespace AdvancedSample.DataAccess.Repository
 
 		public Task<T> Find(Expression<Func<T, bool>> predicate)
 		{
-			return _table.FirstAsync(predicate);
+			return _table.FirstOrDefaultAsync(predicate);
 		}
 	}
 }

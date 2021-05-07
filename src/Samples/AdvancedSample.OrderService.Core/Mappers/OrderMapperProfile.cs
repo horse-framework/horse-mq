@@ -32,7 +32,7 @@ namespace AdvancedSample.OrderService.Core.Mappers
 			CreateMap<ProductDTO, Product>();
 			CreateMap<Product, ProductDTO>();
 			CreateMap<OrderDTO, Order>()
-			   .ForMember(m => m.Status, (src) => src.MapFrom(m => (Status) m.Status));
+			   .ForMember(m => m.Status, (src) => src.MapFrom(m => (OrderStatus) m.Status));
 			CreateMap<Order, OrderDTO>()
 			   .ForMember(m => m.Status, (src) => src.MapFrom(m => (int) m.Status));
 

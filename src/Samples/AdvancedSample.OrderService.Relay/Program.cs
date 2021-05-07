@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Transactions;
 using AdvancedSample.Common.Extensions;
 using AdvancedSample.Common.Infrastructure.Definitions;
 using AdvancedSample.Core.Service;
-using AdvancedSample.DataAccess.Repository;
 using AdvancedSample.OrderService.Core;
 using AdvancedSample.OrderService.Domain;
 using Horse.Messaging.Client;
@@ -22,8 +20,8 @@ provider.UseHorseBus();
 IHorseQueueBus bus = provider.GetRequiredService<IHorseQueueBus>();
 while (true)
 {
-	using var transaction = new CommittableTransaction(new TransactionOptions { IsolationLevel = IsolationLevel.ReadCommitted });
-	await using var context = provider.GetRequiredService<DbContext>();
+	using CommittableTransaction transaction = new(new TransactionOptions { IsolationLevel = IsolationLevel.ReadCommitted });
+	await using DbContext context = provider.GetRequiredService<DbContext>();
 	OutboxMessage relayMessage = await context.Set<OutboxMessage>()
 											  .OrderBy(m => m.Id)
 											  .FirstOrDefaultAsync(m => m.Status == OutboxMessageStatus.Waiting);
@@ -31,21 +29,20 @@ while (true)
 	{
 		transaction.Commit();
 		continue;
-	};
-	_ = Console.Out.WriteLineAsync($"NEED RELAY | {relayMessage.MessageJSON}");
+	}
+	_ = Console.Out.WriteLineAsync($"RELAY | {relayMessage.MessageJSON}");
 	try
 	{
 		relayMessage.Status = OutboxMessageStatus.Pending;
 		context.SaveChanges();
-		var type = JsonConvert.DeserializeObject<Type>(relayMessage.Type);
-		var message = JsonConvert.DeserializeObject(relayMessage.MessageJSON, type);
+		Type type = JsonConvert.DeserializeObject<Type>(relayMessage.Type);
+		object? message = JsonConvert.DeserializeObject(relayMessage.MessageJSON, type);
 		await bus.RaiseEvent(message);
 		relayMessage.Status = OutboxMessageStatus.Sent;
 		context.SaveChanges();
 		transaction.Commit();
-		await Task.Delay(10);
 	}
-	catch 
+	catch
 	{
 		transaction.Rollback();
 	}

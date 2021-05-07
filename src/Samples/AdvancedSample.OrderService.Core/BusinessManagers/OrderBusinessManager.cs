@@ -27,7 +27,7 @@ namespace AdvancedSample.OrderService.Core.BusinessManagers
 		{
 			await using IDbContextTransaction transaction = await _uow.BeginTransaction();
 			Order entity = _mapper.Map<Order>(order);
-			entity.Status = Status.Waiting;
+			entity.Status = OrderStatus.Waiting;
 			EntityEntry<Order> entry = await _uow.Command<Order>().AddAsync(entity);
 			await _uow.SaveChangesAsync();
 			OrderCreatedEvent @event = OrderCreatedEvent.Create(entity.Id);
@@ -37,21 +37,31 @@ namespace AdvancedSample.OrderService.Core.BusinessManagers
 			return entry.Entity;
 		}
 
-		public async ValueTask<OrderSnapshot> CreateSnapshot(OrderDTO order, ProductDTO product)
+		public async ValueTask<OrderSnapshot> AddOrUpdateSnapshot(OrderDTO order, ProductDTO product)
 		{
-			OrderSnapshot snapshot = new()
+			bool update = true;
+			OrderSnapshot snapshot = await _uow.Query<OrderSnapshot>().Find(m => m.Id == order.Id);
+			if (snapshot is null)
 			{
-				Id = order.Id,
-				Quantity = order.Quantity,
-				CreatedAt = order.CreatedAt,
-				DeletedAt = order.DeletedAt,
-				UpdatedAt = order.UpdatedAt,
-				ProductId = product.Id,
-				ProductName = product.Name,
-				TotalPrice = product.Price * order.Quantity
-			};
-			EntityEntry<OrderSnapshot> entry = await _uow.Command<OrderSnapshot>().AddAsync(snapshot);
+				snapshot = new OrderSnapshot();
+				update = false;
+			}
+			
+			snapshot.Id = order.Id;
+			snapshot.Quantity = order.Quantity;
+			snapshot.CreatedAt = order.CreatedAt;
+			snapshot.DeletedAt = order.DeletedAt;
+			snapshot.UpdatedAt = order.UpdatedAt;
+			snapshot.ProductId = product.Id;
+			snapshot.ProductName = product.Name;
+			snapshot.TotalPrice = product.Price * order.Quantity;
+			snapshot.Status = (OrderStatus) order.Status;
+			
+			EntityEntry<OrderSnapshot> entry;
+			if (update) entry = _uow.Command<OrderSnapshot>().Update(snapshot);
+			else entry = await _uow.Command<OrderSnapshot>().AddAsync(snapshot);
 			await _uow.SaveChangesAsync();
+			
 			return entry.Entity;
 		}
 

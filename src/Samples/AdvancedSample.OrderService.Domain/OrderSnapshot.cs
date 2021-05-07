@@ -14,5 +14,8 @@ namespace AdvancedSample.OrderService.Domain
 		public string ProductName { get; set; }
 		public int Quantity { get; set; }
 		public decimal TotalPrice { get; set; }
+		
+		public OrderStatus Status { get; set; }
+		
 	}
 }

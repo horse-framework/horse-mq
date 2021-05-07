@@ -29,7 +29,7 @@ namespace AdvancedSample.OrderService.EventService.Handlers
 
 			OrderDTO order = await GetOrder(@event);
 			ProductDTO product = await GetProduct(@event, order.ProductId);
-			await _bm.CreateSnapshot(order, product);
+			await _bm.AddOrUpdateSnapshot(order, product);
 		}
 
 		private async Task<OrderDTO> GetOrder(OrderCreatedEvent @event)

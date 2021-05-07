@@ -2,7 +2,7 @@
 
 namespace AdvancedSample.OrderService.Domain
 {
-	public enum Status
+	public enum OrderStatus
 	{
 		Waiting,
 		Success,
@@ -13,6 +13,6 @@ namespace AdvancedSample.OrderService.Domain
 	{
 		public int ProductId { get; set; }
 		public int Quantity { get; set; }
-		public Status Status { get; set; }
+		public OrderStatus Status { get; set; }
 	}
 }

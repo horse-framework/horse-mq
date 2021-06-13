@@ -1,174 +1,198 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using Horse.Messaging.Client.Annotations;
 using Horse.Messaging.Client.Internal;
 
 namespace Horse.Messaging.Client.Direct
 {
-    /// <summary>
-    /// Registrar object for IDirectHandler and IRequestHandler implementations
-    /// </summary>
-    public class DirectHandlerRegistrar
-    {
-        private readonly DirectOperator _operator;
+	/// <summary>
+	///     Registrar object for IDirectHandler and IRequestHandler implementations
+	/// </summary>
+	public class DirectHandlerRegistrar
+	{
+		private readonly DirectOperator _operator;
 
-        /// <summary>
-        /// Default options for direct types
-        /// </summary>
-        public DirectTypeDescriptor DefaultDescriptor { get; set; }
+		/// <summary>
+		///     Default options for direct types
+		/// </summary>
+		public DirectTypeDescriptor DefaultDescriptor { get; set; }
 
-        /// <summary>
-        /// Creates new direct handler registrar
-        /// </summary>
-        public DirectHandlerRegistrar(DirectOperator directOperator)
-        {
-            _operator = directOperator;
-        }
+		/// <summary>
+		///     Creates new direct handler registrar
+		/// </summary>
+		public DirectHandlerRegistrar(DirectOperator directOperator)
+		{
+			_operator = directOperator;
+		}
 
-        /// <summary>
-        /// Registers all IDirectReceiver and IRequestHandler types in assemblies
-        /// </summary>
-        public IEnumerable<Type> RegisterAssemblyHandlers(params Type[] assemblyTypes)
-        {
-            return RegisterAssemblyHandlers(null, assemblyTypes);
-        }
+		/// <summary>
+		///     Registers all IDirectReceiver and IRequestHandler types in assemblies
+		/// </summary>
+		public IEnumerable<Type> RegisterAssemblyHandlers(params Type[] assemblyTypes)
+		{
+			return RegisterAssemblyHandlers(null, assemblyTypes);
+		}
 
-        /// <summary>
-        /// Registers all IDirectReceiver and IRequestHandler types in assemblies
-        /// </summary>
-        public IEnumerable<Type> RegisterAssemblyHandlers(Func<IHandlerFactory> consumerFactoryBuilder, params Type[] assemblyTypes)
-        {
-            List<Type> list = new();
-            
-            foreach (Type assemblyType in assemblyTypes)
-            {
-                foreach (Type type in assemblyType.Assembly.GetTypes())
-                {
-                    List<ModelTypeInfo> types = FindModelTypes(type);
-                    foreach (ModelTypeInfo typeInfo in types)
-                    {
-                        DirectHandlerRegistration registration = CreateHandlerRegistration(typeInfo, consumerFactoryBuilder);
-                        if (registration == null)
-                            continue;
+		/// <summary>
+		///     Registers all IDirectReceiver and IRequestHandler types in assemblies
+		/// </summary>
+		public IEnumerable<Type> RegisterAssemblyHandlers(Func<IHandlerFactory> consumerFactoryBuilder, params Type[] assemblyTypes)
+		{
+			List<Type> list = new();
 
-                        lock (_operator.Registrations)
-                            _operator.Registrations.Add(registration);
-                    }
+			foreach (Type assemblyType in assemblyTypes)
+			foreach (Type type in assemblyType.Assembly.GetTypes())
+			{
+				if (type.IsInterface || type.IsAbstract)
+					continue;
 
-                    if (types.Count > 0) list.Add(type);
-                }
-            }
+				List<ModelTypeInfo> types = FindModelTypes(type);
+				foreach (ModelTypeInfo typeInfo in types)
+				{
+					DirectHandlerRegistration registration = CreateHandlerRegistration(typeInfo, consumerFactoryBuilder);
+					if (registration == null)
+						continue;
 
-            return list;
-        }
+					lock (_operator.Registrations)
+					{
+						_operator.Registrations.Add(registration);
+					}
+				}
 
-        /// <summary>
-        /// Registers a single IDirectReceiver or IRequestHandler
-        /// </summary>
-        public void RegisterHandler<THandler>(Func<IHandlerFactory> consumerFactoryBuilder = null)
-        {
-            RegisterHandler(typeof(THandler), consumerFactoryBuilder);
-        }
+				if (types.Count > 0) list.Add(type);
+			}
 
-        /// <summary>
-        /// Registers a single IDirectReceiver or IRequestHandler
-        /// </summary>
-        public void RegisterHandler(Type consumerType, Func<IHandlerFactory> consumerFactoryBuilder = null)
-        {
-            List<ModelTypeInfo> types = FindModelTypes(consumerType);
+			return list;
+		}
 
-            foreach (ModelTypeInfo typeInfo in types)
-            {
-                DirectHandlerRegistration registration = CreateHandlerRegistration(typeInfo, consumerFactoryBuilder);
-                if (registration == null)
-                    throw new TypeLoadException("Cant resolve consumer type");
+		/// <summary>
+		///     Registers a single IDirectReceiver or IRequestHandler
+		/// </summary>
+		public void RegisterHandler<THandler>(Func<IHandlerFactory> consumerFactoryBuilder = null)
+		{
+			RegisterHandler(typeof(THandler), consumerFactoryBuilder);
+		}
 
-                lock (_operator.Registrations)
-                    _operator.Registrations.Add(registration);
-            }
-        }
+		/// <summary>
+		///     Registers a single IDirectReceiver or IRequestHandler
+		/// </summary>
+		public void RegisterHandler(Type consumerType, Func<IHandlerFactory> consumerFactoryBuilder = null)
+		{
+			List<ModelTypeInfo> types = FindModelTypes(consumerType);
 
-        private List<ModelTypeInfo> FindModelTypes(Type consumerType)
-        {
-            Type openDirectGeneric = typeof(IDirectMessageHandler<>);
-            Type openRequestGeneric = typeof(IHorseRequestHandler<,>);
+			foreach (ModelTypeInfo typeInfo in types)
+			{
+				DirectHandlerRegistration registration = CreateHandlerRegistration(typeInfo, consumerFactoryBuilder);
+				if (registration == null)
+					throw new TypeLoadException("Cant resolve consumer type");
 
-            List<ModelTypeInfo> result = new List<ModelTypeInfo>();
+				lock (_operator.Registrations)
+				{
+					_operator.Registrations.Add(registration);
+				}
+			}
+		}
 
-            Type[] interfaceTypes = consumerType.GetInterfaces();
-            foreach (Type interfaceType in interfaceTypes)
-            {
-                if (!interfaceType.IsGenericType)
-                    continue;
+		private List<ModelTypeInfo> FindModelTypes(Type consumerType)
+		{
+			Type openDirectGeneric = typeof(IDirectMessageHandler<>);
+			Type openRequestGeneric = typeof(IHorseRequestHandler<,>);
 
-                Type generic = interfaceType.GetGenericTypeDefinition();
+			List<ModelTypeInfo> result = new();
 
-                if (openDirectGeneric.IsAssignableFrom(generic))
-                    result.Add(new ModelTypeInfo(consumerType, ConsumeSource.Direct, interfaceType.GetGenericArguments().FirstOrDefault()));
+			Type[] interfaceTypes = consumerType.GetInterfaces();
+			foreach (Type interfaceType in interfaceTypes)
+			{
+				if (!interfaceType.IsGenericType)
+					continue;
 
-                else if (openRequestGeneric.IsAssignableFrom(generic))
-                {
-                    Type[] genericArgs = interfaceType.GetGenericArguments();
-                    result.Add(new ModelTypeInfo(consumerType, ConsumeSource.Request, genericArgs[0], genericArgs[1]));
-                }
-            }
+				Type generic = interfaceType.GetGenericTypeDefinition();
 
-            return result;
-        }
+				if (openDirectGeneric.IsAssignableFrom(generic))
+				{
+					result.Add(new ModelTypeInfo(consumerType, ConsumeSource.Direct, interfaceType.GetGenericArguments().FirstOrDefault()));
+				}
 
-        private DirectHandlerRegistration CreateHandlerRegistration(ModelTypeInfo typeInfo, Func<IHandlerFactory> consumerFactoryBuilder)
-        {
-            bool useConsumerFactory = consumerFactoryBuilder != null;
+				else if (openRequestGeneric.IsAssignableFrom(generic))
+				{
+					Type[] genericArgs = interfaceType.GetGenericArguments();
+					result.Add(new ModelTypeInfo(consumerType, ConsumeSource.Request, genericArgs[0], genericArgs[1]));
+				}
+			}
 
-            DirectTypeResolver resolver = new DirectTypeResolver();
-            DirectTypeDescriptor consumerDescriptor = resolver.Resolve(typeInfo.ConsumerType, DefaultDescriptor);
-            DirectTypeDescriptor modelDescriptor = resolver.Resolve(typeInfo.ModelType, DefaultDescriptor);
+			return result;
+		}
 
-            object consumerInstance = useConsumerFactory ? null : Activator.CreateInstance(typeInfo.ConsumerType);
+		private DirectHandlerRegistration CreateHandlerRegistration(ModelTypeInfo typeInfo, Func<IHandlerFactory> consumerFactoryBuilder)
+		{
+			bool useConsumerFactory = consumerFactoryBuilder != null;
 
-            ExecuterBase executer = null;
-            switch (typeInfo.Source)
-            {
-                case ConsumeSource.Direct:
-                {
-                    Type executerType = typeof(DirectHandlerExecuter<>);
-                    Type executerGenericType = executerType.MakeGenericType(typeInfo.ModelType);
-                    executer = (ExecuterBase) Activator.CreateInstance(executerGenericType,
-                                                                       typeInfo.ConsumerType,
-                                                                       consumerInstance,
-                                                                       consumerFactoryBuilder);
-                    break;
-                }
+			DirectTypeResolver resolver = new();
+			DirectTypeDescriptor consumerDescriptor = resolver.Resolve(typeInfo.ConsumerType, DefaultDescriptor);
+			DirectTypeDescriptor modelDescriptor = resolver.Resolve(typeInfo.ModelType, DefaultDescriptor);
 
-                case ConsumeSource.Request:
-                {
-                    Type executerType = typeof(RequestHandlerExecuter<,>);
-                    Type executerGenericType = executerType.MakeGenericType(typeInfo.ModelType, typeInfo.ResponseType);
-                    executer = (ExecuterBase) Activator.CreateInstance(executerGenericType,
-                                                                       typeInfo.ConsumerType,
-                                                                       consumerInstance,
-                                                                       consumerFactoryBuilder);
-                    break;
-                }
-            }
+			object consumerInstance = useConsumerFactory ? null : Activator.CreateInstance(typeInfo.ConsumerType);
 
-            ushort contentType = modelDescriptor.ContentType.HasValue ? modelDescriptor.ContentType.Value : (ushort) 0;
-            if (consumerDescriptor.ContentType.HasValue)
-                contentType = consumerDescriptor.ContentType.Value;
+			ExecuterBase executer = null;
+			switch (typeInfo.Source)
+			{
+				case ConsumeSource.Direct:
+				{
+					Type executerType = typeof(DirectHandlerExecuter<>);
+					Type executerGenericType = executerType.MakeGenericType(typeInfo.ModelType);
+					executer = (ExecuterBase) Activator.CreateInstance(executerGenericType,
+																	   typeInfo.ConsumerType,
+																	   consumerInstance,
+																	   consumerFactoryBuilder);
+					break;
+				}
 
-            DirectHandlerRegistration registration = new DirectHandlerRegistration
-            {
-                ContentType = contentType,
-                MessageType = typeInfo.ModelType,
-                ResponseType = typeInfo.ResponseType,
-                ConsumerType = typeInfo.ConsumerType,
-                ConsumerExecuter = executer
-            };
+				case ConsumeSource.Request:
+				{
+					Type executerType = typeof(RequestHandlerExecuter<,>);
+					Type executerGenericType = executerType.MakeGenericType(typeInfo.ModelType, typeInfo.ResponseType);
+					executer = (ExecuterBase) Activator.CreateInstance(executerGenericType,
+																	   typeInfo.ConsumerType,
+																	   consumerInstance,
+																	   consumerFactoryBuilder);
+					break;
+				}
+			}
 
-            if (executer != null)
-                executer.Resolve(registration);
+			ushort contentType = modelDescriptor.ContentType.HasValue ? modelDescriptor.ContentType.Value : (ushort) 0;
+			if (consumerDescriptor.ContentType.HasValue)
+				contentType = consumerDescriptor.ContentType.Value;
 
-            return registration;
-        }
-    }
+			DirectHandlerRegistration registration = new()
+			{
+				ContentType = contentType,
+				MessageType = typeInfo.ModelType,
+				ResponseType = typeInfo.ResponseType,
+				ConsumerType = typeInfo.ConsumerType,
+				ConsumerExecuter = executer
+			};
+			
+			registration.IntercetorDescriptors.AddRange(ResolveInterceptorAttributes(typeInfo, !useConsumerFactory));
+			executer?.Resolve(registration);
+
+			return registration;
+		}
+
+		private static IEnumerable<InterceptorTypeDescriptor> ResolveInterceptorAttributes(ModelTypeInfo typeInfo, bool createInstance)
+		{
+			List<InterceptorAttribute> consumerInterceptors = typeInfo.ConsumerType.GetCustomAttributes<InterceptorAttribute>().ToList();
+			List<InterceptorAttribute> modelInterceptors = typeInfo.ModelType.GetCustomAttributes<InterceptorAttribute>().ToList();
+
+			foreach (InterceptorAttribute modelInterceptor in modelInterceptors)
+			{
+				if (consumerInterceptors.Any(m => m.InterceptorType.IsAssignableTo(modelInterceptor.InterceptorType))) continue;
+				if (consumerInterceptors.Any(m => m.InterceptorType.IsAssignableFrom(modelInterceptor.InterceptorType))) continue;
+				consumerInterceptors.Add(modelInterceptor);
+			}
+
+			return consumerInterceptors.OrderBy(m => m.Order).Select(m => InterceptorTypeDescriptor.Create(m, createInstance));
+		}
+	}
 }

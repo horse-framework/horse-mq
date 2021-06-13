@@ -9,6 +9,7 @@ using Horse.Messaging.Server.Direct;
 using Horse.Messaging.Server.Options;
 using Horse.Messaging.Server.Queues;
 using Horse.Messaging.Server.Routing;
+using Horse.Messaging.Server.Transactions;
 using Horse.Server;
 
 namespace Horse.Messaging.Server
@@ -51,6 +52,11 @@ namespace Horse.Messaging.Server
         public HorseCache Cache { get; }
 
         /// <summary>
+        /// Transaction rider object manages all transactions and their operations
+        /// </summary>
+        public TransactionRider Transaction { get; }
+
+        /// <summary>
         /// Messaging Queue Server Options
         /// </summary>
         public HorseRiderOptions Options { get; internal set; }
@@ -85,6 +91,8 @@ namespace Horse.Messaging.Server
         /// </summary>
         internal IMessageContentSerializer MessageContentSerializer { get; } = new NewtonsoftContentSerializer();
 
+        private bool _initialized;
+
         #endregion
 
         /// <summary>
@@ -106,11 +114,24 @@ namespace Horse.Messaging.Server
             Direct = new DirectRider(this);
             Router = new RouterRider(this);
             Channel = new ChannelRider(this);
+            Transaction = new TransactionRider(this);
             Cache = new HorseCache(this);
             NodeManager = new NodeManager(this);
 
             Cache.Initialize();
             NodeManager.Initialize();
+        }
+
+        /// <summary>
+        /// Initializes late initialization required services
+        /// </summary>
+        internal void Initialize()
+        {
+            if (_initialized)
+                return;
+
+            _initialized = true;
+            Transaction.Initialize();
         }
 
         /// <summary>
